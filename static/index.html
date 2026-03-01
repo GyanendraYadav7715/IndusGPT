@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GenAI Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        bgMain: 'var(--color-bg-main)',
+                        bgSidebar: 'var(--color-bg-sidebar)',
+                        bgCard: 'var(--color-bg-card)',
+                        bgCardHover: 'var(--color-bg-card-hover)',
+                        bgInput: 'var(--color-bg-input)',
+                        brandBlue: '#2563EB',
+                        textMuted: '#9CA3AF'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root {
+            /* Default Dark Theme */
+            --color-bg-main: #13151A;
+            --color-bg-sidebar: #171922;
+            --color-bg-card: #1C212B;
+            --color-bg-card-hover: #232A37;
+            --color-bg-input: #1E232B;
+            --color-text-main: #FFFFFF;
+            --color-text-muted: #9CA3AF;
+        }
+
+        .light-theme {
+            --color-bg-main: #F3F4F6;
+            --color-bg-sidebar: #FFFFFF;
+            --color-bg-card: #FFFFFF;
+            --color-bg-card-hover: #F9FAFB;
+            --color-bg-input: #FFFFFF;
+            --color-text-main: #111827;
+            --color-text-muted: #6B7280;
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: var(--color-bg-main); 
+            color: var(--color-text-main);
+            transition: background-color 0.3s, color 0.3s;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #4B5563; }
+        
+        .message-content { animation: fadeIn 0.3s ease-out forwards; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .typing-indicator span {
+            animation: blink 1.4s infinite both;
+            height: 6px; width: 6px;
+            background: #9CA3AF;
+            border-radius: 50%;
+            display: inline-block;
+            margin: 0 2px;
+        }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink {
+            0% { opacity: 0.2; transform: scale(0.8); }
+            20% { opacity: 1; transform: scale(1.2); }
+            100% { opacity: 0.2; transform: scale(0.8); }
+        }
+
+        /* Modal Background Blur */
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+        }
+
+        /* Markdown Styling */
+        .markdown-body p { margin-bottom: 0.75em; }
+        .markdown-body p:last-child { margin-bottom: 0; }
+        .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 { font-weight: 700; margin-top: 1em; margin-bottom: 0.5em; color: var(--color-brandBlue); }
+        .markdown-body ul { list-style-type: disc; margin-left: 1.5em; margin-bottom: 0.75em; }
+        .markdown-body ol { list-style-type: decimal; margin-left: 1.5em; margin-bottom: 0.75em; }
+        .markdown-body strong { font-weight: 700; color: inherit; }
+        .markdown-body em { font-style: italic; }
+        .markdown-body code { background: rgba(128,128,128,0.2); padding: 0.2em 0.4em; border-radius: 4px; font-family: monospace; font-size: 0.9em; }
+        .markdown-body pre { background: #0E152A; padding: 1em; border-radius: 8px; overflow-x: auto; margin-bottom: 0.75em; border: 1px solid rgba(255,255,255,0.1); }
+        .markdown-body pre code { background: transparent; padding: 0; color: #E5E7EB; }
+        
+        .light-theme .markdown-body pre { background: #1F2937; }
+        .light-theme .markdown-body h1, .light-theme .markdown-body h2 { color: var(--color-brandBlue); }
+
+        .hide { display: none !important; }
+    </style>
+</head>
+<body class="h-screen flex overflow-hidden selection:bg-brandBlue selection:text-white">
+
+    <!-- Auth Overlay (Login/Signup) -->
+    <div id="auth-overlay" class="fixed inset-0 z-50 flex items-center justify-center modal-overlay hide">
+        <div class="bg-bgSidebar border border-gray-800 rounded-2xl w-full max-w-md p-8 shadow-2xl relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-brandBlue to-purple-500"></div>
+            
+            <div class="text-center mb-8">
+                <i class="fa-solid fa-wand-magic-sparkles text-brandBlue text-3xl mb-3"></i>
+                <h2 class="text-2xl font-bold" id="auth-title">Welcome Back</h2>
+                <p class="text-sm text-textMuted mt-1" id="auth-subtitle">Sign in to continue to GenAI</p>
+            </div>
+
+            <!-- Error Message -->
+            <div id="auth-error" class="hidden bg-red-500/10 border border-red-500/50 text-red-500 text-sm p-3 rounded-lg mb-4 text-center"></div>
+
+            <form id="auth-form" class="space-y-4">
+                <div id="username-group" class="hide">
+                    <label class="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-1">Username</label>
+                    <input type="text" id="auth-username" class="w-full bg-bgInput border border-gray-700/50 rounded-xl px-4 py-2.5 outline-none focus:border-brandBlue transition-colors text-sm">
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-1">Email Address</label>
+                    <input type="email" id="auth-email" required class="w-full bg-bgInput border border-gray-700/50 rounded-xl px-4 py-2.5 outline-none focus:border-brandBlue transition-colors text-sm">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-1">Password</label>
+                    <input type="password" id="auth-password" required class="w-full bg-bgInput border border-gray-700/50 rounded-xl px-4 py-2.5 outline-none focus:border-brandBlue transition-colors text-sm">
+                </div>
+
+                <button type="submit" class="w-full bg-brandBlue hover:bg-blue-600 text-white font-medium py-2.5 rounded-xl transition-colors shadow-lg shadow-brandBlue/20 mt-2" id="auth-submit-btn">
+                    Sign In
+                </button>
+            </form>
+
+            <div class="mt-6 text-center text-sm text-textMuted">
+                <span id="auth-switch-text">Don't have an account?</span> 
+                <button onclick="toggleAuthMode()" class="text-brandBlue font-semibold hover:underline" id="auth-switch-btn">Sign Up</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 z-40 flex items-center justify-center modal-overlay hide">
+        <div class="bg-bgSidebar border border-gray-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-lg font-bold"><i class="fa-solid fa-gear mr-2 text-textMuted"></i> Settings</h3>
+                <button onclick="closeSettings()" class="text-textMuted hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-sm font-semibold mb-2">Theme</label>
+                    <div class="flex gap-2">
+                        <button onclick="setTheme('dark')" id="theme-btn-dark" class="flex-1 py-2 rounded-lg border border-gray-700/50 bg-bgInput text-sm hover:bg-white/5 transition-colors border-brandBlue text-brandBlue">Dark</button>
+                        <button onclick="setTheme('light')" id="theme-btn-light" class="flex-1 py-2 rounded-lg border border-gray-700/50 bg-bgInput text-sm hover:bg-white/5 transition-colors">Light</button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold mb-2">Interface Language</label>
+                    <select id="ui-language" class="w-full bg-bgInput border border-gray-700/50 rounded-lg px-3 py-2 outline-none text-sm appearance-none">
+                        <option value="en">English</option>
+                        <option value="hi">हिंदी (Hindi)</option>
+                    </select>
+                </div>
+                
+                <div class="pt-4 border-t border-gray-800">
+                    <button onclick="logout()" class="w-full py-2.5 rounded-lg text-sm font-medium text-red-500 hover:bg-red-500/10 transition-colors flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-arrow-right-from-bracket"></i> Log Out
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Main Application UI -->
+    <div id="app-container" class="w-full h-full flex hide">
+        
+        <!-- Sidebar -->
+        <aside class="w-[260px] bg-bgSidebar flex-shrink-0 flex flex-col border-r border-gray-800/30 hidden md:flex">
+            <div class="p-4">
+                <button onclick="startNewChat()" class="w-full bg-brandBlue hover:bg-blue-700 transition-colors text-white rounded-xl py-2.5 px-4 flex items-center justify-center gap-2 font-medium text-sm shadow-sm">
+                    <i class="fa-solid fa-plus"></i>
+                    New Chat
+                </button>
+            </div>
+            
+            <div class="px-5 mt-4 flex-1 overflow-y-auto">
+                <h3 class="text-[10px] font-bold text-gray-500 tracking-widest uppercase mb-3">Recent Conversations</h3>
+                <div id="history-list" class="space-y-1">
+                    <!-- History injected here via JS -->
+                    <div class="text-xs text-textMuted italic text-center py-4">No conversations yet</div>
+                </div>
+            </div>
+            
+            <div class="p-4 space-y-1">
+                <div onclick="openSettings()" class="flex items-center gap-3 text-sm text-gray-400 hover:text-gray-200 hover:bg-white/5 pt-2 pb-2.5 px-3 -mx-3 rounded-lg cursor-pointer transition-colors">
+                    <i class="fa-solid fa-gear text-lg w-5 text-center"></i>
+                    <span>Settings</span>
+                </div>
+                
+                <div class="flex items-center gap-3 pt-3 mt-2 hover:bg-white/5 p-2 -mx-2 rounded-xl cursor-pointer bg-bgInput border border-gray-800/50">
+                    <div class="w-9 h-9 rounded-full bg-gradient-to-tr from-[#FF9A9E] to-[#FECFEF] flex items-center justify-center text-gray-900 font-bold shrink-0 uppercase" id="profile-initial">
+                        U
+                    </div>
+                    <div class="flex flex-col min-w-0">
+                        <span class="text-sm font-semibold truncate" id="profile-name">User</span>
+                        <span class="text-[9px] text-brandBlue font-bold uppercase tracking-wider">Online</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 flex flex-col relative w-full bg-bgMain">
+            <!-- Header -->
+            <header class="h-14 flex items-center justify-between px-6 shrink-0 border-b border-gray-800/30">
+                <div class="flex items-center gap-2">
+                    <button class="md:hidden text-textMuted hover:text-white mr-2"><i class="fa-solid fa-bars"></i></button>
+                    <i class="fa-solid fa-wand-magic-sparkles text-brandBlue text-lg"></i>
+                    <h1 class="font-bold text-[15px] tracking-wide">GenAI Assistant</h1>
+                    <span class="bg-brandBlue/20 text-brandBlue border border-brandBlue/30 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ml-2">Secure</span>
+                </div>
+            </header>
+
+            <!-- Chat Area -->
+            <div id="chat-container" class="flex-1 overflow-y-auto w-full flex flex-col relative scroll-smooth">
+                <div id="chat-box" class="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-8 pt-6 pb-36">
+                    
+                    <!-- Zero State -->
+                    <div id="empty-state" class="flex flex-col items-center justify-center min-h-[60vh] animate-in fade-in duration-700">
+                        <div class="w-16 h-16 bg-[#0E152A] rounded-2xl flex items-center justify-center mb-6 border border-brandBlue/20 shadow-lg">
+                            <i class="fa-solid fa-arrows-rotate text-3xl text-brandBlue"></i>
+                        </div>
+                        <h2 class="text-3xl sm:text-[34px] font-bold tracking-tight mb-4 text-center">How can I help you today?</h2>
+                        <p class="text-textMuted text-center max-w-lg mb-12 text-[15px]">I can help you translate, code, summarize, or chat in multiple languages securely.</p>
+                        
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+                            <div class="custom-prompt bg-bgCard hover:bg-bgCardHover border border-gray-800 p-4 rounded-xl cursor-pointer transition-colors flex flex-col items-start gap-3 shadow-sm">
+                                <i class="fa-solid fa-language text-brandBlue text-lg"></i>
+                                <div>
+                                    <h4 class="text-[13px] font-semibold mb-1">Translate to Hindi</h4>
+                                    <p class="text-[11px] text-textMuted leading-snug">"Can you explain quantum computing simply?"</p>
+                                </div>
+                            </div>
+                            <!-- More prompt cards... -->
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-bgMain via-bgMain/95 to-transparent pt-12 pb-6 px-4 md:px-8">
+                <div class="max-w-3xl mx-auto flex flex-col gap-2">
+                    <form id="chat-form" class="relative flex items-center bg-bgInput border border-gray-700/50 rounded-2xl p-1.5 w-full shadow-xl transition-all focus-within:border-gray-500">
+                        <input 
+                            type="text" 
+                            id="message-input" 
+                            class="flex-1 bg-transparent px-4 py-3 text-inherit placeholder-gray-500 outline-none text-[15px] focus:ring-0 min-w-0"
+                            placeholder="Message GenAI Assistant..."
+                            autocomplete="off"
+                            required
+                        >
+                        <button 
+                            type="submit" 
+                            id="send-button"
+                            class="bg-brandBlue hover:bg-blue-500 text-white w-[34px] h-[34px] rounded-full flex items-center justify-center transition-all disabled:opacity-50 disabled:bg-gray-600 shrink-0 mr-1 shadow-md shadow-brandBlue/20"
+                        >
+                            <i class="fa-solid fa-paper-plane text-xs translate-x-[-1px] translate-y-[1px]"></i>
+                        </button>
+                    </form>
+                    <div class="text-center text-[10px] text-textMuted px-4 mt-1">
+                        Securely saved to local MongoDB. GenAI can make mistakes.
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Application Logic -->
+    <script>
+        // --- State Management ---
+        let authToken = localStorage.getItem('token') || null;
+        let currentUser = localStorage.getItem('username') || null;
+        let currentConversationId = null;
+        let isSignupMode = false;
+        let currentTheme = localStorage.getItem('theme') || 'dark';
+
+        // --- DOM Elements ---
+        const authOverlay = document.getElementById('auth-overlay');
+        const appContainer = document.getElementById('app-container');
+        const authForm = document.getElementById('auth-form');
+        const authError = document.getElementById('auth-error');
+        const historyList = document.getElementById('history-list');
+        const chatBox = document.getElementById('chat-box');
+        const emptyState = document.getElementById('empty-state');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+
+        // --- Initialization ---
+        function initApp() {
+            applyTheme(currentTheme);
+            if (authToken) {
+                showApp();
+                loadSidebarHistory();
+                document.getElementById('profile-name').innerText = currentUser;
+                document.getElementById('profile-initial').innerText = currentUser ? currentUser.charAt(0) : 'U';
+            } else {
+                showAuth();
+            }
+        }
+
+        function showApp() {
+            authOverlay.classList.add('hide');
+            appContainer.classList.remove('hide');
+            messageInput.focus();
+        }
+
+        function showAuth() {
+            appContainer.classList.add('hide');
+            authOverlay.classList.remove('hide');
+        }
+
+        // --- Auth Logic ---
+        function toggleAuthMode() {
+            isSignupMode = !isSignupMode;
+            authError.classList.add('hidden');
+            if(isSignupMode) {
+                document.getElementById('auth-title').innerText = 'Create Account';
+                document.getElementById('auth-subtitle').innerText = 'Start your journey with GenAI';
+                document.getElementById('username-group').classList.remove('hide');
+                document.getElementById('auth-username').required = true;
+                document.getElementById('auth-submit-btn').innerText = 'Sign Up';
+                document.getElementById('auth-switch-text').innerText = 'Already have an account?';
+                document.getElementById('auth-switch-btn').innerText = 'Sign In';
+            } else {
+                document.getElementById('auth-title').innerText = 'Welcome Back';
+                document.getElementById('auth-subtitle').innerText = 'Sign in to continue to GenAI';
+                document.getElementById('username-group').classList.add('hide');
+                document.getElementById('auth-username').required = false;
+                document.getElementById('auth-submit-btn').innerText = 'Sign In';
+                document.getElementById('auth-switch-text').innerText = "Don't have an account?";
+                document.getElementById('auth-switch-btn').innerText = 'Sign Up';
+            }
+        }
+
+        authForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            authError.classList.add('hidden');
+            
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+            const username = document.getElementById('auth-username').value;
+
+            const endpoint = isSignupMode ? '/signup' : '/login';
+            const payload = isSignupMode ? { username, email, password } : { email, password };
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Authentication failed');
+                }
+
+                // Success
+                authToken = data.access_token;
+                currentUser = data.username;
+                localStorage.setItem('token', authToken);
+                localStorage.setItem('username', currentUser);
+                
+                initApp();
+                
+            } catch (err) {
+                authError.innerText = err.message;
+                authError.classList.remove('hidden');
+            }
+        });
+
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('username');
+            authToken = null;
+            currentUser = null;
+            currentConversationId = null;
+            window.location.reload();
+        }
+
+        // --- History & Chat Management ---
+        async function loadSidebarHistory() {
+            try {
+                const response = await fetch('/conversations', {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                if(response.status === 401) {
+                    logout(); return;
+                }
+                const hist = await response.json();
+                
+                if(hist.length === 0) {
+                    historyList.innerHTML = '<div class="text-xs text-textMuted italic text-center py-4">No conversations yet</div>';
+                    return;
+                }
+
+                historyList.innerHTML = '';
+                hist.forEach(conv => {
+                    const div = document.createElement('div');
+                    div.className = `flex items-center gap-3 text-sm text-gray-400 hover:text-gray-200 hover:bg-white/5 py-2 px-3 -mx-3 rounded-lg cursor-pointer transition-colors group ${currentConversationId === conv.id ? 'bg-white/10 text-white' : ''}`;
+                    div.innerHTML = `
+                        <i class="fa-solid fa-message text-gray-500 group-hover:text-gray-400"></i>
+                        <span class="truncate flex-1">${conv.title}</span>
+                    `;
+                    div.onclick = () => loadConversation(conv.id);
+                    historyList.appendChild(div);
+                });
+            } catch(e) { console.error("Could not load history"); }
+        }
+
+        function startNewChat() {
+            currentConversationId = null;
+            const msgs = document.querySelectorAll('.message-content');
+            msgs.forEach(m => m.remove());
+            emptyState.style.display = 'flex';
+            loadSidebarHistory(); // Remove active state
+        }
+
+        async function loadConversation(id) {
+            try {
+                const response = await fetch(`/conversations/${id}`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                if(!response.ok) throw new Error("Could not load chat");
+                
+                const chat = await response.json();
+                currentConversationId = chat._id;
+                
+                // Clear UI
+                const msgs = document.querySelectorAll('.message-content');
+                msgs.forEach(m => m.remove());
+                emptyState.style.display = 'none';
+
+                // Render History
+                if(chat.messages && chat.messages.length > 0) {
+                    chat.messages.forEach(msg => {
+                        renderMessageUI(msg.content, msg.role, msg.language);
+                    });
+                } else {
+                    emptyState.style.display = 'flex';
+                }
+                loadSidebarHistory(); // Update active selection
+
+            } catch(e) { console.error(e); }
+        }
+
+        // --- Chat Sending Logic ---
+        document.getElementById('chat-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            messageInput.value = '';
+            messageInput.disabled = true;
+            sendButton.disabled = true;
+
+            renderMessageUI(message, 'user');
+            showTypingIndicator();
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({ message: message, conversationId: currentConversationId })
+                });
+
+                if (response.status === 401) {
+                    logout(); return;
+                }
+
+                const data = await response.json();
+                removeTypingIndicator();
+                renderMessageUI(data.response, 'assistant', data.language);
+
+                // Update current ID if this is a newly created chat
+                if (!currentConversationId && data.conversationId) {
+                    currentConversationId = data.conversationId;
+                }
+                
+                // Refresh sidebar secretly in background
+                loadSidebarHistory();
+
+            } catch (error) {
+                console.error(error);
+                removeTypingIndicator();
+                renderMessageUI('Network Error or Unauthorized. Please log in again.', 'assistant');
+            } finally {
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+                messageInput.focus();
+            }
+        });
+
+        // --- UI Rendering Helpers ---
+        function renderMessageUI(content, role, lang = null) {
+            if (emptyState) emptyState.style.display = 'none';
+
+            const wrapper = document.createElement('div');
+            wrapper.className = `w-full flex ${role === 'user' ? 'justify-end' : 'justify-start'} mb-6 message-content`;
+
+            const avatar = role !== 'user' ? `
+                <div class="w-8 h-8 rounded-full bg-[#0E152A] flex items-center justify-center shrink-0 mr-4 border border-brandBlue/30 mt-1 shadow-md">
+                    <i class="fa-solid fa-arrows-rotate text-brandBlue text-[11px]"></i>
+                </div>
+            ` : '';
+
+            // Handle color changes for light mode text readability
+            const bubbleStyleUser = currentTheme === 'light' ? 'bg-brandBlue text-white shadow-md border-transparent' : 'bg-bgInput text-gray-100 border-gray-700/50 shadow-lg';
+            
+            let messageRendered = content;
+            let containerClass = "text-inherit leading-relaxed py-1 w-full"; // added w-full just in case
+            
+            if (role === 'assistant') {
+                containerClass += " markdown-body text-[14.5px]";
+                try {
+                    const rawHtml = marked.parse(content);
+                    messageRendered = DOMPurify.sanitize(rawHtml);
+                } catch(e) {
+                    console.error("Markdown parsing failed", e);
+                    messageRendered = content.replace(/\n/g, '<br>');
+                }
+            } else {
+                messageRendered = content.replace(/\n/g, '<br>');
+            }
+
+            const contentHtml = `
+                <div class="flex flex-col max-w-[85%] ${role === 'user' ? 'items-end' : 'items-start w-full'}">
+                    <div class="${role === 'user' ? `px-5 py-3.5 rounded-2xl ${role==='user'?'rounded-tr-sm':''} border ${bubbleStyleUser}` : containerClass}">
+                        ${messageRendered}
+                    </div>
+                    ${lang ? `<span class="text-[10px] uppercase font-bold text-gray-500 mt-2 tracking-wider select-none px-1">${lang}</span>` : ''}
+                </div>
+            `;
+
+            wrapper.innerHTML = role === 'user' ? contentHtml : avatar + contentHtml;
+            chatBox.appendChild(wrapper);
+            document.getElementById('chat-container').scrollTo({top: chatBox.scrollHeight, behavior: 'smooth'});
+        }
+
+        function showTypingIndicator() {
+            const wrapper = document.createElement('div');
+            wrapper.id = 'typing-indicator';
+            wrapper.className = `w-full flex justify-start mb-6 message-content`;
+            wrapper.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-[#0E152A] flex items-center justify-center shrink-0 mr-4 border border-brandBlue/30 mt-1">
+                    <i class="fa-solid fa-arrows-rotate text-brandBlue text-[11px]"></i>
+                </div>
+                <div class="flex items-center h-8">
+                    <div class="typing-indicator flex items-center">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+            `;
+            chatBox.appendChild(wrapper);
+            document.getElementById('chat-container').scrollTo({top: chatBox.scrollHeight, behavior: 'smooth'});
+        }
+
+        function removeTypingIndicator() {
+            const ind = document.getElementById('typing-indicator');
+            if(ind) ind.remove();
+        }
+
+        // --- Settings Modal Logic ---
+        const settingsModal = document.getElementById('settings-modal');
+        function openSettings() { settingsModal.classList.remove('hide'); }
+        function closeSettings() { settingsModal.classList.add('hide'); }
+
+        function applyTheme(theme) {
+            currentTheme = theme;
+            localStorage.setItem('theme', theme);
+            if(theme === 'light') {
+                document.body.classList.add('light-theme');
+                document.getElementById('theme-btn-light').classList.add('border-brandBlue', 'text-brandBlue');
+                document.getElementById('theme-btn-dark').classList.remove('border-brandBlue', 'text-brandBlue');
+            } else {
+                document.body.classList.remove('light-theme');
+                document.getElementById('theme-btn-dark').classList.add('border-brandBlue', 'text-brandBlue');
+                document.getElementById('theme-btn-light').classList.remove('border-brandBlue', 'text-brandBlue');
+            }
+        }
+        function setTheme(theme) { applyTheme(theme); }
+
+        // Start App
+        initApp();
+
+    </script>
+</body>
+</html>
