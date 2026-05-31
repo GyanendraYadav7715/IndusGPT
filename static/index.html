@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script>
@@ -189,6 +190,56 @@
         </div>
     </div>
 
+    <!-- Subscription Upgrade Modal -->
+    <div id="subscription-modal" class="fixed inset-0 z-40 flex items-center justify-center modal-overlay hide">
+        <div class="bg-bgSidebar border border-gray-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-yellow-500 via-amber-500 to-yellow-600"></div>
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-crown text-yellow-500"></i> IndusGPT Pro</h3>
+                <button onclick="closeSubscriptionModal()" class="text-textMuted hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="text-center py-2">
+                <p class="text-sm text-textMuted mb-6">Upgrade now to unlock unlimited chats for a month!</p>
+                <div class="bg-bgCard hover:bg-bgCardHover border border-yellow-500/30 rounded-xl p-5 mb-6 transition-all duration-300">
+                    <div class="text-[11px] font-bold text-yellow-500 uppercase tracking-widest mb-1">Monthly Pass</div>
+                    <div class="text-3xl font-extrabold mb-1">₹299<span class="text-sm text-textMuted font-normal"> / month</span></div>
+                    <div class="text-xs text-textMuted">Billed monthly. Cancel anytime.</div>
+                    
+                    <div class="border-t border-gray-800/80 my-4"></div>
+                    <ul class="text-left text-xs space-y-2.5 max-w-[240px] mx-auto text-gray-300">
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-check text-green-500 shrink-0"></i> <span>Unlimited interactive messages</span></li>
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-check text-green-500 shrink-0"></i> <span>Advanced Sarvam multilingual AI</span></li>
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-check text-green-500 shrink-0"></i> <span>Ultra-fast response priority</span></li>
+                    </ul>
+                </div>
+                <button id="checkout-btn" onclick="initiateRazorpayPayment()" class="w-full bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700 text-white font-medium py-3 rounded-xl transition-all shadow-lg shadow-yellow-500/10 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-lock text-sm"></i> Subscribe Now (₹299)
+                </button>
+                <div class="text-[10px] text-textMuted mt-3">Secure payment via Razorpay. Fast & Instant activation.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Free Tier Limit Reached Modal -->
+    <div id="limit-reached-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-overlay hide">
+        <div class="bg-bgSidebar border border-gray-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-1 bg-red-500"></div>
+            <div class="w-14 h-14 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/20 text-red-500">
+                <i class="fa-solid fa-circle-exclamation text-2xl"></i>
+            </div>
+            <h3 class="text-xl font-bold mb-2">Free Limit Reached</h3>
+            <p class="text-sm text-textMuted mb-6 px-2">You have utilized all 5 free trial chat messages. Unlock unlimited chats by subscribing to IndusGPT Pro.</p>
+            <div class="flex flex-col gap-2">
+                <button onclick="openSubscriptionFromBlock()" class="w-full bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700 text-white font-medium py-2.5 rounded-xl transition-colors shadow-lg">
+                    Upgrade to Pro (₹299/mo)
+                </button>
+                <button onclick="closeLimitReachedModal()" class="w-full py-2.5 text-xs text-textMuted hover:text-white transition-colors">
+                    Maybe Later
+                </button>
+            </div>
+        </div>
+    </div>
+
 
     <!-- Main Application UI -->
     <div id="app-container" class="w-full h-full flex hide">
@@ -210,7 +261,29 @@
                 </div>
             </div>
             
-            <div class="p-4 space-y-1">
+            <div class="p-4 space-y-2">
+                <!-- Subscription / Quota Tracker Card -->
+                <div id="sidebar-subscription-card" onclick="openSubscriptionModal()" class="group relative overflow-hidden bg-gradient-to-br from-yellow-500/10 to-amber-500/5 border border-yellow-500/20 hover:border-yellow-500/40 rounded-xl p-3.5 cursor-pointer transition-all duration-300">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] font-bold text-yellow-500 uppercase tracking-widest flex items-center gap-1.5">
+                            <i class="fa-solid fa-crown text-yellow-500 animate-pulse"></i>
+                            <span id="sidebar-plan-name">IndusGPT Free</span>
+                        </span>
+                        <span class="text-[10px] text-textMuted bg-gray-800/80 px-1.5 py-0.5 rounded" id="sidebar-usage-count">0/5 msg</span>
+                    </div>
+                    
+                    <!-- Progress Bar for Free limits -->
+                    <div id="sidebar-quota-bar-container" class="w-full bg-gray-850 rounded-full h-1.5 overflow-hidden">
+                        <div id="sidebar-quota-bar" class="bg-gradient-to-r from-yellow-500 to-amber-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                    
+                    <!-- Upgrade action label -->
+                    <div id="sidebar-upgrade-link" class="text-[10px] text-yellow-500/90 font-medium mt-2 flex items-center gap-1 group-hover:text-yellow-400 transition-colors">
+                        <span>Upgrade to PRO for unlimited</span>
+                        <i class="fa-solid fa-arrow-right text-[8px] transition-transform group-hover:translate-x-0.5"></i>
+                    </div>
+                </div>
+
                 <div onclick="openSettings()" class="flex items-center gap-3 text-sm text-gray-400 hover:text-gray-200 hover:bg-white/5 pt-2 pb-2.5 px-3 -mx-3 rounded-lg cursor-pointer transition-colors">
                     <i class="fa-solid fa-gear text-lg w-5 text-center"></i>
                     <span>Settings</span>
@@ -321,6 +394,7 @@
             if (authToken) {
                 showApp();
                 loadSidebarHistory();
+                updateSubscriptionStatus();
                 document.getElementById('profile-name').innerText = currentUser;
                 document.getElementById('profile-initial').innerText = currentUser ? currentUser.charAt(0) : 'U';
             } else {
@@ -410,6 +484,56 @@
         }
 
         // --- History & Chat Management ---
+        let activeDropdownId = null;
+
+        function toggleMenu(event, id) {
+            event.stopPropagation();
+            const dropdown = document.getElementById(`dropdown-${id}`);
+            if (activeDropdownId && activeDropdownId !== id) {
+                const prevDropdown = document.getElementById(`dropdown-${activeDropdownId}`);
+                if (prevDropdown) prevDropdown.classList.add('hidden');
+            }
+            if (dropdown) {
+                dropdown.classList.toggle('hidden');
+                activeDropdownId = dropdown.classList.contains('hidden') ? null : id;
+            }
+        }
+
+        async function deleteConversation(event, id) {
+            event.stopPropagation();
+            if (confirm("Are you sure you want to delete this conversation?")) {
+                try {
+                    const response = await fetch(`/conversations/${id}`, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': `Bearer ${authToken}` }
+                    });
+                    if (response.ok) {
+                        if (currentConversationId === id) {
+                            startNewChat();
+                        } else {
+                            loadSidebarHistory();
+                        }
+                    } else {
+                        alert("Failed to delete conversation.");
+                    }
+                } catch (e) {
+                    console.error("Error deleting conversation", e);
+                    alert("Error deleting conversation.");
+                }
+            }
+        }
+
+        // Close dropdown when clicking outside
+        window.addEventListener('click', (e) => {
+            if (activeDropdownId) {
+                const dropdown = document.getElementById(`dropdown-${activeDropdownId}`);
+                if (dropdown && !dropdown.contains(e.target)) {
+                    dropdown.classList.add('hidden');
+                    activeDropdownId = null;
+                }
+            }
+        });
+
         async function loadSidebarHistory() {
             try {
                 const response = await fetch('/conversations', {
@@ -428,12 +552,27 @@
                 historyList.innerHTML = '';
                 hist.forEach(conv => {
                     const div = document.createElement('div');
-                    div.className = `flex items-center gap-3 text-sm text-gray-400 hover:text-gray-200 hover:bg-white/5 py-2 px-3 -mx-3 rounded-lg cursor-pointer transition-colors group ${currentConversationId === conv.id ? 'bg-white/10 text-white' : ''}`;
+                    div.className = `flex items-center gap-3 text-sm text-gray-400 hover:text-gray-200 hover:bg-white/5 py-2 px-3 -mx-3 rounded-lg cursor-pointer transition-colors group relative ${currentConversationId === conv.id ? 'bg-white/10 text-white' : ''}`;
                     div.innerHTML = `
                         <i class="fa-solid fa-message text-gray-500 group-hover:text-gray-400"></i>
                         <span class="truncate flex-1">${conv.title}</span>
+                        <div class="relative shrink-0">
+                            <button onclick="toggleMenu(event, '${conv.id}')" class="text-gray-500 hover:text-gray-200 dark:hover:text-white p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <i class="fa-solid fa-ellipsis-vertical"></i>
+                            </button>
+                            <div id="dropdown-${conv.id}" onclick="event.stopPropagation()" class="hidden absolute right-0 mt-1 w-28 bg-bgSidebar border border-gray-200 dark:border-gray-800 rounded-lg shadow-xl z-50 py-1">
+                                <button onclick="deleteConversation(event, '${conv.id}')" class="w-full text-left px-3 py-1.5 text-xs text-red-500 hover:bg-red-500/10 transition-colors flex items-center gap-2">
+                                    <i class="fa-solid fa-trash-can"></i> Delete
+                                </button>
+                            </div>
+                        </div>
                     `;
-                    div.onclick = () => loadConversation(conv.id);
+                    div.onclick = (e) => {
+                        if (e.target.closest('button') || e.target.closest('[id^="dropdown-"]')) {
+                            return;
+                        }
+                        loadConversation(conv.id);
+                    };
                     historyList.appendChild(div);
                 });
             } catch(e) { console.error("Could not load history"); }
@@ -502,6 +641,19 @@
                     logout(); return;
                 }
 
+                if (response.status === 403) {
+                    const errData = await response.json();
+                    if (errData.detail === "FREE_LIMIT_REACHED") {
+                        removeTypingIndicator();
+                        // Remove last user message bubble from local UI
+                        if (chatBox.lastElementChild) {
+                            chatBox.lastElementChild.remove();
+                        }
+                        openLimitReachedModal();
+                        return;
+                    }
+                }
+
                 const data = await response.json();
                 removeTypingIndicator();
                 renderMessageUI(data.response, 'assistant', data.language);
@@ -511,8 +663,9 @@
                     currentConversationId = data.conversationId;
                 }
                 
-                // Refresh sidebar secretly in background
+                // Refresh sidebar and quota status
                 loadSidebarHistory();
+                updateSubscriptionStatus();
 
             } catch (error) {
                 console.error(error);
@@ -613,6 +766,184 @@
             }
         }
         function setTheme(theme) { applyTheme(theme); }
+
+        // --- Subscription & Payment Logic ---
+        const subscriptionModal = document.getElementById('subscription-modal');
+        const limitReachedModal = document.getElementById('limit-reached-modal');
+
+        function openSubscriptionModal() { 
+            subscriptionModal.classList.remove('hide'); 
+        }
+        function closeSubscriptionModal() { 
+            subscriptionModal.classList.add('hide'); 
+        }
+        function openLimitReachedModal() { 
+            limitReachedModal.classList.remove('hide'); 
+        }
+        function closeLimitReachedModal() { 
+            limitReachedModal.classList.add('hide'); 
+        }
+        function openSubscriptionFromBlock() { 
+            closeLimitReachedModal(); 
+            openSubscriptionModal(); 
+        }
+
+        async function updateSubscriptionStatus() {
+            if (!authToken) return;
+            try {
+                const res = await fetch('/subscription/status', {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                if (res.status === 200) {
+                    const data = await res.json();
+                    
+                    const planNameEl = document.getElementById('sidebar-plan-name');
+                    const usageCountEl = document.getElementById('sidebar-usage-count');
+                    const quotaBarEl = document.getElementById('sidebar-quota-bar');
+                    const quotaBarContainer = document.getElementById('sidebar-quota-bar-container');
+                    const upgradeLinkEl = document.getElementById('sidebar-upgrade-link');
+                    const sidebarCard = document.getElementById('sidebar-subscription-card');
+
+                    if (data.is_subscribed) {
+                        planNameEl.textContent = 'IndusGPT Pro';
+                        planNameEl.className = 'text-[10px] font-bold text-yellow-500 uppercase tracking-widest flex items-center gap-1.5';
+                        usageCountEl.textContent = 'PRO Active';
+                        usageCountEl.className = 'text-[9px] text-yellow-400 font-bold bg-yellow-950/50 border border-yellow-500/20 px-1.5 py-0.5 rounded';
+                        quotaBarContainer.classList.add('hide');
+                        upgradeLinkEl.innerHTML = '<span class="text-yellow-500/95 font-semibold">Pro Subscribed &bull; Unlimited access</span>';
+                        sidebarCard.onclick = null;
+                        sidebarCard.classList.remove('cursor-pointer');
+                    } else {
+                        planNameEl.textContent = 'IndusGPT Free';
+                        planNameEl.className = 'text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5';
+                        usageCountEl.textContent = `${data.messages_sent}/5 msg`;
+                        usageCountEl.className = 'text-[10px] text-textMuted bg-gray-800/80 px-1.5 py-0.5 rounded';
+                        quotaBarContainer.classList.remove('hide');
+                        
+                        const percentage = Math.min((data.messages_sent / 5) * 100, 100);
+                        quotaBarEl.style.width = `${percentage}%`;
+                        
+                        if (percentage >= 100) {
+                            quotaBarEl.className = "bg-red-500 h-full rounded-full transition-all duration-500";
+                        } else {
+                            quotaBarEl.className = "bg-gradient-to-r from-yellow-500 to-amber-500 h-full rounded-full transition-all duration-500";
+                        }
+                        
+                        upgradeLinkEl.innerHTML = '<span>Upgrade to PRO for unlimited</span> <i class="fa-solid fa-arrow-right text-[8px]"></i>';
+                        sidebarCard.onclick = openSubscriptionModal;
+                        sidebarCard.classList.add('cursor-pointer');
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to load subscription status", err);
+            }
+        }
+
+        async function initiateRazorpayPayment() {
+            const checkoutBtn = document.getElementById('checkout-btn');
+            const originalText = checkoutBtn.innerHTML;
+            checkoutBtn.disabled = true;
+            checkoutBtn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i> Processing...';
+            
+            try {
+                const res = await fetch('/subscription/create-order', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                if (!res.ok) throw new Error("Failed to create order");
+                const order = await res.json();
+                
+                const options = {
+                    "key": order.key_id,
+                    "amount": order.amount,
+                    "currency": order.currency,
+                    "name": "IndusGPT Pro Subscription",
+                    "description": "Unlock unlimited multilingual AI chats",
+                    "image": "https://img.icons8.com/color/96/diamond--v1.png",
+                    "order_id": order.id, 
+                    "handler": async function (response){
+                        try {
+                            const verifyRes = await fetch('/subscription/verify-payment', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${authToken}`
+                                },
+                                body: JSON.stringify({
+                                    razorpay_payment_id: response.razorpay_payment_id,
+                                    razorpay_order_id: response.razorpay_order_id,
+                                    razorpay_signature: response.razorpay_signature
+                                })
+                            });
+                            if (verifyRes.ok) {
+                                alert("Congratulations! Your IndusGPT Pro subscription has been activated successfully.");
+                                closeSubscriptionModal();
+                                await updateSubscriptionStatus();
+                            } else {
+                                alert("Payment verification failed. Please contact support.");
+                            }
+                        } catch (err) {
+                            alert("Verification error: " + err.message);
+                        }
+                    },
+                    "prefill": {
+                        "name": currentUser || "User",
+                        "email": "user@example.com"
+                    },
+                    "theme": {
+                        "color": "#eab308"
+                    }
+                };
+                
+                if (order.is_simulated) {
+                    console.log("Simulating checkout for mock order:", order.id);
+                    setTimeout(async () => {
+                        const confirmSim = confirm("[SIMULATED CHECKOUT]\nWould you like to simulate a successful payment for order " + order.id + "?");
+                        if (confirmSim) {
+                            const dummyPaymentId = "pay_mock_" + Math.random().toString(36).substring(2, 10);
+                            const dummySignature = "sig_mock_" + Math.random().toString(36).substring(2, 10);
+                            
+                            const verifyRes = await fetch('/subscription/verify-payment', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${authToken}`
+                                },
+                                body: JSON.stringify({
+                                    razorpay_payment_id: dummyPaymentId,
+                                    razorpay_order_id: order.id,
+                                    razorpay_signature: dummySignature
+                                })
+                            });
+                            if (verifyRes.ok) {
+                                alert("Congratulations! Simulated subscription activated successfully.");
+                                closeSubscriptionModal();
+                                await updateSubscriptionStatus();
+                            } else {
+                                alert("Simulated payment verification failed.");
+                            }
+                        } else {
+                            alert("Payment simulation cancelled.");
+                        }
+                        checkoutBtn.disabled = false;
+                        checkoutBtn.innerHTML = originalText;
+                    }, 1000);
+                    return;
+                }
+                
+                const rzp = new Razorpay(options);
+                rzp.on('payment.failed', function (response){
+                    alert("Payment failed: " + response.error.description);
+                });
+                rzp.open();
+                
+            } catch (err) {
+                alert("Checkout error: " + err.message);
+            } finally {
+                checkoutBtn.disabled = false;
+                checkoutBtn.innerHTML = originalText;
+            }
+        }
 
         // Start App
         initApp();

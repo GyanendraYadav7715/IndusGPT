@@ -2,9 +2,9 @@ from fastapi import APIRouter, HTTPException, Depends
 import bson
 import datetime
 
-from app.models.schemas import ChatRequest
+from app.models.schemas import ChatRequest, VerifyPaymentPayload
 from app.core.security import get_current_user
-from app.services.db import conversations_collection
+from app.services.db import conversations_collection, users_collection
 from app.services.chatbot_service import MultilingualChatbotService
 from app.core.config import settings
 
@@ -50,11 +50,43 @@ async def get_conversation_history(conversation_id: str, user_id: str = Depends(
     except bson.errors.InvalidId:
          raise HTTPException(status_code=400, detail="Invalid Conversation ID format")
 
+@router.delete("/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str, user_id: str = Depends(get_current_user)):
+    try:
+        result = conversations_collection.delete_one({"_id": bson.ObjectId(conversation_id), "userId": user_id})
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        return {"status": "success", "message": "Conversation deleted successfully"}
+    except bson.errors.InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid Conversation ID format")
+
 @router.post("/chat")
 async def chat_endpoint(request: ChatRequest, user_id: str = Depends(get_current_user)):
     if not settings.SARVAM_API_KEY:
         return {"response": "Error: SARVAM_API_KEY not configured.", "language": "english"}
     
+    # Load user and check subscription/limits
+    db_user = users_collection.find_one({"_id": bson.ObjectId(user_id)})
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    is_subscribed = db_user.get("is_subscribed", False)
+    subscription_expires_at = db_user.get("subscription_expires_at")
+    
+    # Check if subscription is active
+    has_active_subscription = False
+    if is_subscribed and subscription_expires_at:
+        if subscription_expires_at > datetime.datetime.utcnow():
+            has_active_subscription = True
+
+    if not has_active_subscription:
+        messages_sent = db_user.get("messages_sent", 0)
+        if messages_sent >= 5:
+            raise HTTPException(status_code=403, detail="FREE_LIMIT_REACHED")
+        
+        # Increment message count
+        users_collection.update_one({"_id": bson.ObjectId(user_id)}, {"$inc": {"messages_sent": 1}})
+
     conv_id = request.conversationId
     history = []
 
@@ -99,3 +131,65 @@ async def chat_endpoint(request: ChatRequest, user_id: str = Depends(get_current
         "language": response_data["language"],
         "conversationId": conv_id
     }
+
+@router.get("/subscription/status")
+async def get_subscription_status(user_id: str = Depends(get_current_user)):
+    db_user = users_collection.find_one({"_id": bson.ObjectId(user_id)})
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    is_subscribed = db_user.get("is_subscribed", False)
+    subscription_expires_at = db_user.get("subscription_expires_at")
+    
+    # Check expiration
+    has_active_subscription = False
+    if is_subscribed and subscription_expires_at:
+        if subscription_expires_at > datetime.datetime.utcnow():
+            has_active_subscription = True
+
+    return {
+        "is_subscribed": has_active_subscription,
+        "subscription_expires_at": subscription_expires_at.isoformat() if subscription_expires_at else None,
+        "messages_sent": db_user.get("messages_sent", 0),
+        "username": db_user.get("username", "User")
+    }
+
+@router.post("/subscription/create-order")
+async def create_subscription_order(user_id: str = Depends(get_current_user)):
+    import requests
+    # Price is ₹299 (29900 paise)
+    try:
+        response = requests.post(
+            f"{settings.PAYMENT_MICROSERVICE_URL}/payment/order",
+            json={"amount": 29900, "currency": "INR"}
+        )
+        if response.status_code != 200:
+            raise HTTPException(status_code=500, detail="Failed to create payment order via microservice")
+        return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Payment microservice offline: {str(e)}")
+
+@router.post("/subscription/verify-payment")
+async def verify_subscription_payment(payload: VerifyPaymentPayload, user_id: str = Depends(get_current_user)):
+    import requests
+    # Call payment microservice
+    try:
+        response = requests.post(
+            f"{settings.PAYMENT_MICROSERVICE_URL}/payment/verify",
+            json=payload.dict()
+        )
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Payment verification failed")
+        
+        # Update user status to PRO (subscribed) for 30 days
+        expiry_date = datetime.datetime.utcnow() + datetime.timedelta(days=30)
+        users_collection.update_one(
+            {"_id": bson.ObjectId(user_id)},
+            {"$set": {
+                "is_subscribed": True,
+                "subscription_expires_at": expiry_date
+            }}
+        )
+        return {"status": "success", "message": "Subscription activated!"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Payment microservice error: {str(e)}")

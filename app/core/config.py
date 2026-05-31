@@ -9,5 +9,6 @@ class Settings:
     SECRET_KEY = os.getenv("JWT_SECRET", "super-secret-key-change-in-production")
     ALGORITHM = "HS256"
     SARVAM_API_KEY = os.getenv("SARVAM_API_KEY", "")
+    PAYMENT_MICROSERVICE_URL = os.getenv("PAYMENT_MICROSERVICE_URL", "http://localhost:8001")
 
 settings = Settings()
